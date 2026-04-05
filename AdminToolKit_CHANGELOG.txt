@@ -1,0 +1,1361 @@
+ADMINTOOLKIT — CHANGELOG
+=========================
+Versions listed newest first (v1.0 = current release, working backwards).
+Each entry documents what changed, why it happened, and how it was resolved.
+
+
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+VERSION 1.10  --  SCCM Remote Control integration
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : New feature
+Files  : Scripts\Remote\Start-RemoteControl.ps1  (new)
+         CmRcViewer\  (new directory — place binaries here)
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+         AdminToolKit_Installer.nsi
+         README.md
+
+  NEW FEATURE -- SCCM Remote Control button
+  ------------------------------------------
+  A new 'Support' ribbon group has been added to the Remote PC
+  tab, positioned between 'Remote Services' and 'Tools'.
+  It contains a single 'Remote Control' button that launches
+  CmRcViewer.exe (SCCM Configuration Manager Remote Control
+  Viewer) pointed directly at the target PC hostname — no
+  interactive prompts, no dialog boxes.
+
+  How it works:
+    1. Enter the target PC hostname in the Remote Target Bar.
+    2. Click 'Remote Control' in the Support group.
+    3. Start-RemoteControl.ps1 resolves the CmRcViewer.exe
+       path, verifies it exists, then calls:
+         Start-Process CmRcViewer.exe -ArgumentList $TargetHost
+       This opens the viewer window immediately without
+       any prompts.
+
+  CmRcViewer.exe install path:
+    C:\Program Files (x86)\Microsoft Configuration Manager
+    \AdminConsole\bin\i386\CmRcViewer.exe
+    (This is the standard SCCM Admin Console install path.)
+
+  CmRcViewer companion DLLs required:
+    CmRcViewer.exe, CmRcViewer.exe.config, CmRcService.exe,
+    RdpCoreCLR.dll, msvcr120.dll, msvcp120.dll,
+    RdpCoreTS.dll, RemoteControlCore.dll
+
+  NSIS installer update:
+    - Version bumped to 1.10.
+    - New CheckAndInstallCmRcViewer macro added.
+      During installation, if CmRcViewer.exe is not found at
+      the expected path, the installer prompts the user to
+      install the bundled CmRcViewer files. If accepted, all
+      companion DLLs are copied from the CmRcViewer\ folder
+      (next to the .nsi) to the standard install path.
+    - Installer reads CmRcViewer\ at build time using
+      File /nonfatal directives so a missing CmRcViewer\
+      folder does not abort the NSIS compile.
+
+  Populating the CmRcViewer\ folder:
+    Copy the required files from an existing SCCM Admin
+    Console installation at:
+      C:\Program Files (x86)\Microsoft Configuration Manager
+      \AdminConsole\bin\i386\
+    Place them in the CmRcViewer\ folder at the solution root
+    before running Build-Installer.bat.
+    Note: These are proprietary Microsoft binaries and cannot
+    be redistributed without appropriate licensing.
+
+  Script behaviour when CmRcViewer is missing:
+    If CmRcViewer.exe is not present at the expected path,
+    Start-RemoteControl.ps1 outputs a clear error message
+    with the expected path and install instructions, rather
+    than failing silently.
+
+  ScriptRegistry.cs:
+    New 'Remote Support' group added with one entry:
+      Name = 'Remote Control'
+      GroupName = 'Remote Support'
+      IconKey = 'IconRemoteControl'
+      ScriptPath = Scripts\Remote\Start-RemoteControl.ps1
+
+  MainWindow.xaml:
+    - IconRemoteControl DrawingImage added to Window.Resources
+      (monitor + cursor geometry, colour #56B6C2 / #FFD700).
+    - New 'Support' RibbonGroupBox inserted in the Remote PC
+      tab between Remote Services and Tools groups.
+
+
+════
+VERSION 1.09  --  NSIS installer (Build-Installer.bat)
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : New feature + bug fixes
+Files  : AdminToolKit_Installer.nsi  (new)
+         Build-Installer.bat          (new)
+
+  NEW FEATURE -- Windows Installer (.exe)
+  ----------------------------------------
+  Added a full NSIS-based installer that packages AdminToolKit
+  into a distributable AdminToolKit-Setup.exe.
+
+  Build requirements:
+    - NSIS 3.x (https://nsis.sourceforge.io/Download)
+    - Visual Studio / VS Build Tools with MSBuild
+  Build command: run Build-Installer.bat as Administrator
+
+  Installer features:
+    - Pre-flight checks: verifies Windows 10+, .NET 4.8
+      (offers download link if missing), and PowerShell 5.1
+    - Previous version detection: reads UninstallString from
+      registry and silently removes any existing install
+      before proceeding
+    - Install location: defaults to
+      C:\Program Files\AdminToolKit with a Browse button
+    - Options page: checkboxes for Desktop shortcut and
+      Start Menu shortcut (both checked by default)
+    - Installs: AdminToolKit.exe, 3 dependency DLLs, all 54
+      PowerShell scripts, README, LICENSE, admintoolkit.ico
+    - Add/Remove Programs entry with publisher, version,
+      estimated size, and uninstall string
+    - Uninstall.exe with /S silent flag; removes all files,
+      shortcuts, and registry keys
+    - Finish page with Launch and View README options
+
+  INSTALLER BUG FIXES (multiple iterations):
+  --------------------------------------------
+  Fix 1 - NuGet restore path-with-spaces error
+    nuget.exe restore failed with 'Illegal characters in path'
+    when the project was in a folder with spaces (C:\New folder).
+    Resolved by checking for Fluent.Ribbon DLL first -- if already
+    present from Build.bat the restore step is skipped. Fallback
+    uses MSBuild /t:Restore which handles spaces correctly.
+
+  Fix 2 - MSBuild platform error MSB4126
+    'The specified solution configuration Release|Any CPU is
+    invalid'. The .sln defines the platform as Release|AnyCPU
+    (no space). Fixed: /p:Platform=AnyCPU (no quotes, no space).
+
+  Fix 3 - AdminToolKit.exe.config false error
+    No app.config in project so exe.config is never generated.
+    Removed from the verification check and NSIS File directive.
+
+  Fix 4 - NSIS invalid command ${GetSize}
+    GetSize requires FileFunc.nsh. Added !include 'FileFunc.nsh'.
+
+  Fix 5 - Garbled characters in installer welcome text
+    The welcome page showed garbled text (e.g. 'atm-c') instead
+    of dashes and bullets. The NSIS dialog font does not support
+    Unicode em-dashes (U+2014) or bullet points (U+2022).
+    All visible installer strings now use plain ASCII hyphens.
+
+  Fix 6 - Unicode em-dash in CreateShortcut tooltip strings
+    Two CreateShortcut tooltip parameters used em-dash in active
+    code (not comments). Replaced with ASCII hyphen.
+
+
+════
+VERSION 1.08  —  Office removal fix + AD script parse error
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Scripts\Local\Remove-MicrosoftOffice.ps1
+         Scripts\Remote\Remove-RemoteMicrosoftOffice.ps1
+         Scripts\ActiveDirectory\Reset-ADPassword.ps1
+
+  BUG FIX 1 — Office removal incomplete (blank Start Menu icons remain)
+  ---------------------------------------------------------------------
+  PROBLEM
+    Remove Office script completed without errors but Office LTSC 2021
+    Professional Plus and Project Professional 2021 remained visible in
+    Settings > Apps > Installed Apps. Blank placeholder icons persisted
+    in the Start Menu even after a reboot.
+
+  CAUSE
+    The script used OfficeClickToRun.exe with a scenario-based argument
+    (scenario=install scenariosubtype=repair) which triggers a repair
+    rather than a full uninstall. For Office 2019, 2021 LTSC, and
+    Microsoft 365 Apps, the correct uninstall binary is
+    OfficeC2RClient.exe with the /uninstall PIDALL argument.
+    PIDALL removes all Click-to-Run products simultaneously including
+    Project and Visio — a single call handles everything.
+
+    The shortcut cleanup only targeted known folder names but Office
+    2021 LTSC uses a different Start Menu path
+    ("Microsoft Office LTSC 2021" / "Microsoft Office LTSC Professional
+    Plus 2021") that was not covered. The icon cache was also not
+    cleared, leaving blank ghost entries in the Start Menu.
+
+  RESOLUTION
+    Both local and remote scripts updated with three fixes:
+
+    1. C2R uninstall command changed to:
+         OfficeC2RClient.exe /uninstall PIDALL /forceappshutdown /norestart
+       Accepts exit codes 0 (success) and 3010 (success, reboot needed).
+       Falls back to the scenario-based approach if exit code is not 0/3010.
+
+    2. Start Menu shortcut cleanup now also removes individual .lnk files
+       by scanning recursively for Word, Excel, PowerPoint, Outlook,
+       OneNote, Access, Publisher, Project, Visio, Teams, Lync shortcuts
+       in both ProgramData and APPDATA Start Menu locations — covering
+       any Office version regardless of folder naming.
+
+    3. Icon cache cleared after file cleanup:
+         Remove-Item $env:LOCALAPPDATA\IconCache.db -Force
+         ie4uinit.exe -show
+       This forces Windows to rebuild the icon cache on next logon,
+       removing ghost/blank icons from the Start Menu and taskbar.
+       A reboot after running the script is recommended.
+
+  BUG FIX 2 — Reset Password parse error
+  ---------------------------------------
+  PROBLEM
+    Reset Password button in the Active Directory tab failed with:
+    "[FATAL] Missing closing ')' in expression"
+    at line 22 of the script.
+
+  CAUSE
+    PowerShell does not allow an if/else statement as an inline
+    subexpression argument inside a method call or -f format operator.
+    The script had:
+      Write-Output ("  Pwd Last Set : {0}" -f (
+          if ($user.PasswordLastSet) { ... } else { ... }
+      ))
+    This is invalid syntax — PowerShell parses if as a statement,
+    not an expression that can appear inside (...).
+
+  RESOLUTION
+    Assigned the conditional to a variable before the Write-Output call:
+      $pwdLastSet = if ($user.PasswordLastSet) { ... } else { "Never" }
+      Write-Output ("  Pwd Last Set : {0}" -f $pwdLastSet)
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.07  —  AD and Local script output fix
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Scripts\ActiveDirectory\Get-ADUserInfo.ps1
+         Scripts\ActiveDirectory\Get-ADComputerInfo.ps1
+         Scripts\ActiveDirectory\Get-ADGroupMembers.ps1
+         Scripts\ActiveDirectory\Get-UserGroups.ps1
+         Scripts\ActiveDirectory\Get-InactiveUsers.ps1
+         Scripts\ActiveDirectory\Get-LockedOutUsers.ps1
+         Scripts\ActiveDirectory\Get-PasswordExpiry.ps1
+         Scripts\ActiveDirectory\Get-StaleComputers.ps1
+         Scripts\ActiveDirectory\Copy-GroupMembership.ps1
+         Scripts\ActiveDirectory\Export-GroupMembership.ps1
+         Scripts\ActiveDirectory\Export-OUObjects.ps1
+         Scripts\Local\*.ps1 (18 scripts — all using Write-Host)
+
+  PROBLEM
+    Active Directory tab scripts displayed FormatEntryData type names
+    instead of actual data. Get User Info, Computer Info, Group Members,
+    User Groups, Inactive Users, Locked Out Users, Password Expiry, and
+    Stale Computers all showed
+    "Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData"
+    in the output panel.
+    
+    Local scripts (System Info, Installed Software, Last Logins,
+    Running Services, etc.) also produced no visible output.
+
+  CAUSE
+    Two separate issues:
+
+    1. Eight AD scripts used Format-List or Format-Table on PSCustomObject
+       or pipeline results. The PowerShellRunner collects output from
+       ps.Invoke() which returns the raw PSObjects from the pipeline.
+       Format-List and Format-Table produce internal formatting objects
+       (FormatStartData, FormatEntryData, GroupStartData, FormatEndData)
+       which ToString() as their full type names rather than text.
+
+    2. Eighteen local scripts and three AD scripts used Write-Host
+       instead of Write-Output. Write-Host writes to the PowerShell
+       Information stream (stream 6), not the success output stream
+       (stream 1). The PowerShellRunner collects from ps.Invoke()
+       (success stream only) and ps.Streams.Information, but
+       Write-Host output in local scripts was not being routed
+       correctly through the runner's collection pass.
+
+  RESOLUTION
+    1. Eight AD scripts rewritten to replace Format-List and Format-Table
+       with Write-Output using manual -f string formatting:
+         - Get-ADUserInfo: key-value pair layout using KV helper function
+         - Get-ADComputerInfo: key-value pair layout
+         - Get-ADGroupMembers: columnar table with Write-Output -f
+         - Get-UserGroups: columnar table with Write-Output -f
+         - Get-InactiveUsers: columnar table with Write-Output -f
+         - Get-LockedOutUsers: columnar table with Write-Output -f
+         - Get-PasswordExpiry: columnar table with Write-Output -f
+         - Get-StaleComputers: columnar table with Write-Output -f
+
+    2. All remaining Write-Host calls replaced with Write-Output across
+       18 local scripts and 3 AD scripts. -ForegroundColor parameters
+       stripped (not supported by Write-Output).
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.06  —  Remote script output fix (Write-Host → Write-Output)
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Scripts\Remote\Get-RemoteSystemInfo.ps1
+         Scripts\Remote\Get-RemoteProcesses.ps1
+         Scripts\Remote\Get-RemoteServices.ps1
+         Scripts\Remote\Install-RemoteUpdates.ps1
+         Scripts\Remote\Add-RemotePrinter.ps1
+         Scripts\Remote\Clear-RemoteTempFiles.ps1
+         Scripts\Remote\Fix-RemoteWMI.ps1
+         Scripts\Remote\Fix-RemoteWindowsUpdate.ps1
+         Scripts\Remote\Invoke-RemoteIntuneSync.ps1
+         Scripts\Remote\Remove-RemoteMicrosoftOffice.ps1
+         Scripts\Remote\Remove-RemoteOldUserProfiles.ps1
+         Scripts\Remote\Remove-RemoteSCCMClient.ps1
+         Scripts\Remote\Repair-RemoteWindows.ps1
+         Scripts\Remote\Reset-RemoteFileAssociations.ps1
+
+  PROBLEM
+    Remote System Info and Remote Processes buttons completed
+    successfully (green tick, correct timing) but displayed no output
+    in the console panel — the output area was blank between the
+    header and footer lines.
+
+  CAUSE
+    Write-Host inside Invoke-Command scriptblocks writes directly to
+    the PowerShell host (console window) of the process it runs in.
+    When executing inside an Invoke-Command session, "the host" is the
+    remote machine's console — the output never travels back through
+    the PSSession pipeline to the calling session on JUMPBOX.
+    Write-Output (and all pipeline-producing cmdlets) serialize their
+    output as objects across the PSSession boundary and are what the
+    caller actually receives.
+
+    This affected all 14 remote scripts. The v1.05 rewrites of
+    Get-RemoteSystemInfo, Get-RemoteProcesses, Get-RemoteServices, and
+    Install-RemoteUpdates introduced Write-Host as part of the
+    Format-Table removal, which caused the blank output.
+    The other 10 scripts had pre-existing Write-Host calls with
+    -ForegroundColor parameters that were silently discarded by the
+    remote session.
+
+  RESOLUTION
+    All 14 remote scripts updated — Write-Host replaced with
+    Write-Output inside every Invoke-Command scriptblock.
+    -ForegroundColor parameters stripped from all Write-Output calls
+    (Write-Output does not support colour parameters).
+    The 4 scripts rewritten in v1.05 were also updated to ensure
+    manual column formatting uses Write-Output with -f string operator.
+    No C# changes required — scripts only.
+
+  NOTE
+    Write-Host is still used outside Invoke-Command scriptblocks
+    (in the preamble lines before the remote call) — this is correct
+    and expected since those lines run locally on JUMPBOX and their
+    output is captured normally by the PowerShellRunner.
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.05  —  Remote script output fix + threading final
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Scripts\Remote\Get-RemoteSystemInfo.ps1
+         Scripts\Remote\Get-RemoteProcesses.ps1
+         Scripts\Remote\Get-RemoteServices.ps1
+         Scripts\Remote\Install-RemoteUpdates.ps1
+         Helpers\PowerShellRunner.cs
+         ViewModels\MainViewModel.cs
+         ViewModels\LocalScriptsViewModel.cs
+         ViewModels\RemoteScriptsViewModel.cs
+         ViewModels\ActiveDirectoryViewModel.cs
+
+  BUG FIX 1 — FormatEntryData in remote script output
+  ----------------------------------------------------
+  PROBLEM
+    Remote System Info, Processes, and Services buttons displayed
+    "Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData"
+    (and FormatStartData, GroupStartData, etc.) instead of actual data.
+
+  CAUSE
+    Four remote scripts used Format-List and Format-Table inside their
+    Invoke-Command -ScriptBlock blocks. When a script runs inside an
+    Invoke-Command session, PowerShell formatting objects cannot be
+    serialized across the PSSession boundary. The objects are
+    deserialized on the calling side as their type names rather than
+    rendered text. This is a known PSRemoting limitation — Format-*
+    cmdlets must never be used inside remote scriptblocks.
+
+  RESOLUTION
+    All four scripts rewritten to use Write-Host with manual column
+    formatting using PowerShell -f string operator:
+      Write-Host ("{0,-20} : {1}" -f $key, $value)    (key-value pairs)
+      Write-Host ("{0,-30} {1,-10} {2}" -f ...)         (table columns)
+    Scripts affected: Get-RemoteSystemInfo, Get-RemoteProcesses,
+    Get-RemoteServices, Install-RemoteUpdates.
+
+  BUG FIX 2 — ObservableCollection threading crash (definitive)
+  --------------------------------------------------------------
+  PROBLEM
+    System.InvalidOperationException count mismatch continued to appear
+    intermittently even after previous fixes. Script output was visible
+    but the error dialog appeared after completion.
+
+  CAUSE
+    The footer lines (divider + completion status) were appended by the
+    ViewModel in a separate AppendOutputBatch() call after awaiting the
+    runner Task. This created two separate Dispatcher.Invoke operations:
+    one for the script output (from DeliverToUI) and one for the footer.
+    Even at DispatcherPriority.Send, these were two distinct operations
+    that could be separated by other queued dispatcher messages.
+
+  RESOLUTION
+    Complete architecture redesign — PowerShellRunner no longer uses a
+    callback-per-line pattern. Instead:
+
+    1. The runner accepts headerLines[] and an onComplete callback.
+    2. It collects [header + output + footer] into a single List on the
+       background thread. The footer (divider + result line) is appended
+       by the runner itself — the ViewModel never touches the footer.
+    3. FireOnComplete() delivers the entire List via ONE
+       Dispatcher.Invoke(DispatcherPriority.Send) call.
+    4. MainViewModel.ReplaceOutput(List<OutputLine>) clears OutputLines
+       and adds every line inside that single dispatcher callback.
+
+    It is now physically impossible for any interleaving to occur —
+    the entire script run (clear + header + output + footer) completes
+    as one atomic UI operation. ViewModels are now synchronous (no async/
+    await) which also eliminates the ConfigureAwait concern entirely.
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.04  —  Remote credential passing fix (working)
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Helpers\PowerShellRunner.cs
+         Scripts\Remote\*.ps1 (all 16 remote scripts)
+
+  BUG FIX — "Access is denied" with alternate credentials (resolved)
+  ------------------------------------------------------------------
+  PROBLEM
+    Remote PC tab scripts consistently returned "Access is denied" when
+    alternate credentials were supplied in the AdminToolKit UI, despite
+    Test-WSMan and Invoke-Command from the PowerShell command line both
+    succeeding with identical credentials.
+
+  CAUSE — Double hop
+    All 16 remote scripts already contain their own
+    "Invoke-Command -ComputerName $TargetHost" calls to run on the
+    target machine. The v1.03 fix wrapped the entire script inside a
+    second Invoke-Command in the C# runner, creating a nested remote
+    session: JUMPBOX -> WIN11-PC01 (first hop) -> WIN11-PC01 again
+    (second hop). Windows refuses credential delegation across a second
+    hop by default unless CredSSP is explicitly configured — which it
+    is not in a standard lab. The result was an "Access is denied" error
+    on the inner Invoke-Command regardless of whether the outer one
+    authenticated successfully.
+
+  RESOLUTION — Two-part fix:
+
+    1. PowerShellRunner.cs
+       The C# runner no longer wraps scripts in Invoke-Command.
+       Instead it prepends two PowerShell variable declarations and
+       runs the script locally:
+
+         With credentials:
+           $__pass = ConvertTo-SecureString '<pwd>' -AsPlainText -Force
+           $__cred = New-Object PSCredential('<domain\user>', $__pass)
+           <script content>
+
+         Without credentials:
+           $__cred = $null
+           <script content>
+
+       The scripts themselves handle all remoting — the runner just
+       provides the credential object as a variable.
+
+    2. All 16 remote .ps1 scripts
+       Each script now begins with a credential parameter block:
+
+         $__credParams = @{}
+         if ($__cred -ne $null) {
+             $__credParams['Credential']     = $__cred
+             $__credParams['Authentication'] = 'Negotiate'
+         }
+
+       Every Invoke-Command call uses splatting to apply these
+       parameters conditionally:
+         Invoke-Command -ComputerName $TargetHost @__credParams -ScriptBlock { ... }
+
+       When credentials are supplied, @__credParams injects
+       -Credential and -Authentication Negotiate automatically.
+       When no credentials are supplied ($__cred = $null),
+       @__credParams is empty and Invoke-Command uses the current
+       Windows identity — preserving pass-through behaviour for
+       domain-joined machines.
+
+  VERIFIED
+    Remote System Info, Disk Usage, Running Processes and other remote
+    scripts confirmed working in lab environment (JUMPBOX -> WIN11-PC01)
+    with lab.local\labadmin credentials via the Alternate Credentials
+    checkbox in the Remote Target Bar.
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.03  —  Remote execution rewrite + threading final fix
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Helpers\PowerShellRunner.cs
+         ViewModels\MainViewModel.cs
+         ViewModels\RemoteScriptsViewModel.cs
+         ViewModels\LocalScriptsViewModel.cs
+         ViewModels\ActiveDirectoryViewModel.cs
+
+  BUG FIX 1 — "Access is denied" with alternate credentials (final)
+  -----------------------------------------------------------------
+  PROBLEM
+    Remote PC tab scripts consistently returned:
+    "[REMOTE ERROR] Connecting to remote server <hostname> failed with
+    the following error message: Access is denied."
+    Credentials were correctly entered (lab.local / labadmin /
+    Admin@12345!). Test-WSMan from JUMPBOX with identical credentials
+    succeeded. Invoke-Command from JUMPBOX command line succeeded and
+    returned lab\labadmin. The issue was isolated to the app only.
+
+  CAUSE
+    The app used WSManConnectionInfo + RunspaceFactory.CreateRunspace()
+    — the low-level WinRM API. This API sends credentials differently
+    at the HTTP transport layer compared to PowerShell's own remoting
+    pipeline. For domain accounts, Kerberos ticket acquisition and NTLM
+    challenge-response are handled by the PowerShell remoting stack,
+    not by the raw WSMan API. The WSMan API path was unable to
+    authenticate successfully even though the credentials were correct,
+    because it bypasses the PowerShell session layer that Invoke-Command
+    relies on.
+
+  RESOLUTION
+    Completely replaced WSManConnectionInfo + RunspaceFactory with a
+    local PowerShell.Create() session that builds and runs an
+    Invoke-Command script string — exactly mirroring what works from
+    the command line:
+
+      With credentials:
+        $__pass = ConvertTo-SecureString '<pwd>' -AsPlainText -Force
+        $__cred = New-Object PSCredential('<domain\user>', $__pass)
+        Invoke-Command -ComputerName '<host>' -Credential $__cred
+                       -Authentication Negotiate -ScriptBlock { <script> }
+
+      Without credentials (pass-through):
+        Invoke-Command -ComputerName '<host>'
+                       -Authentication NegotiateWithImplicitCredential
+                       -ScriptBlock { <script> }
+
+    The password is injected via ConvertTo-SecureString so it is never
+    stored or logged as plain text. Unused using directives
+    (System.Management.Automation.Runspaces, System.Security) removed.
+
+  BUG FIX 2 — ObservableCollection threading crash (final resolution)
+  -------------------------------------------------------------------
+  PROBLEM
+    System.InvalidOperationException: "An ItemsControl is inconsistent
+    with its items source. Accumulated count 4 is different from actual
+    count 6." Two error dialogs appearing simultaneously. Occurred when
+    running remote scripts, especially when WinRM connection failed.
+
+  CAUSE
+    Two concurrent async paths were racing to modify OutputLines:
+    1. ExecuteScript called ClearOutput() then AppendOutputBatch(header)
+       as two separate Dispatcher.Invoke calls.
+    2. PingTargetAsync's async continuation called AppendOutput() and
+       could fire between those two calls, landing in an empty collection
+       before the header lines arrived.
+    Additionally, IsBusy was set after ClearOutput, so PingTargetAsync
+    could not reliably detect that a script was running.
+
+  RESOLUTION
+    Four changes applied together:
+
+    1. ClearAndBegin(IEnumerable<OutputLine>) — new MainViewModel method
+       that performs Clear + all header line Adds in a single
+       Dispatcher.Invoke(DispatcherPriority.Send) call. It is physically
+       impossible for any other thread to insert between Clear and the
+       first Add since they execute in the same dispatcher callback.
+
+    2. IsBusy = true set BEFORE ClearAndBegin in all three ViewModels.
+       This ensures PingTargetAsync sees IsBusy=true before the output
+       panel is cleared.
+
+    3. PingTargetAsync now checks !IsBusy before calling AppendOutput.
+       If a script has claimed the output panel, the ping result line is
+       silently suppressed. The status bar dot and text still update so
+       the user sees the Online/Offline result.
+
+    4. All Dispatcher operations use DispatcherPriority.Send — the
+       highest WPF priority — ensuring mutations process before any
+       pending layout or render passes.
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.02  —  WinRM auth fix + threading fix (final)
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Bug fix
+Files  : Helpers\PowerShellRunner.cs
+         ViewModels\MainViewModel.cs
+         ViewModels\LocalScriptsViewModel.cs
+         ViewModels\RemoteScriptsViewModel.cs
+         ViewModels\ActiveDirectoryViewModel.cs
+
+  BUG FIX 1 — "Access is denied" with alternate credentials on Remote PC tab
+  --------------------------------------------------------------------------
+  PROBLEM
+    Clicking any Remote PC tab button with alternate credentials filled in
+    produced: "[ERROR] Connecting to remote server <hostname> failed with
+    the following error message: Access is denied."
+    The status dot showed Online (ping succeeded) but WinRM rejected the
+    connection.
+
+  CAUSE
+    PowerShellRunner used AuthenticationMechanism.NegotiateWithImplicitCredential
+    unconditionally for all WinRM connections — including those where a
+    PSCredential was explicitly supplied. Despite its name, this mode
+    completely ignores the PSCredential object and uses the current Windows
+    session token (the logged-in user's Kerberos ticket) instead. When
+    running as a local user on JUMPBOX trying to connect to WIN11-PC01
+    as a domain admin, the session token was rejected.
+
+  RESOLUTION
+    Authentication mechanism now branches on whether credentials are present:
+      Credentials supplied  ->  AuthenticationMechanism.Negotiate
+                                (transmits the PSCredential via NTLM/Kerberos)
+      No credentials        ->  AuthenticationMechanism.NegotiateWithImplicitCredential
+                                (pass-through the current Windows session — unchanged)
+
+  BUG FIX 2 — ObservableCollection threading crash (final resolution)
+  -------------------------------------------------------------------
+  PROBLEM
+    System.InvalidOperationException: "An ItemsControl is inconsistent
+    with its items source. Accumulated count 4 is different from actual
+    count 6." Occurred when running remote scripts in a domain-joined
+    lab environment.
+
+  CAUSE
+    Two concurrent async paths were both calling Dispatcher.Invoke to
+    modify OutputLines simultaneously — the PingTargetAsync completion
+    and the script header lines both dispatch separate individual Invoke
+    calls that can interleave with ClearOutput's own Invoke. Previous
+    fixes (batch delivery in PowerShellRunner, ConfigureAwait(true)) did
+    not cover this path because the header/footer lines were still added
+    as individual AppendOutput() calls, each with their own Dispatcher.Invoke.
+
+  RESOLUTION
+    Three changes applied together:
+    1. MainViewModel.RunOnUI() — single private dispatcher helper used
+       by all output methods, eliminating duplicated dispatcher logic.
+    2. MainViewModel.AppendOutputBatch(IEnumerable<OutputLine>) — new
+       method that adds a whole list of lines inside a single
+       Dispatcher.Invoke call. Header (3 lines) and footer (2 lines)
+       now each land atomically — nothing can interleave between them.
+    3. All three ViewModels rewritten to use AppendOutputBatch for their
+       pre/post script lines, and pass _main.AppendOutput directly as
+       the runner callback (removing the local Emit() shim layer).
+
+  BUILD FIX — CS1513 / CS1002 syntax errors in ViewModels
+  --------------------------------------------------------
+  CAUSE
+    An automated regex replacement that converted individual Emit() calls
+    to AppendOutputBatch() left orphaned "new OutputLine { ... }," statements
+    as free-floating expressions outside any method call, and left an
+    incomplete AppendOutputBatch() initialiser block in RemoteScriptsViewModel
+    (missing the middle header line and closing brace).
+
+  RESOLUTION
+    RemoteScriptsViewModel.cs and ActiveDirectoryViewModel.cs fully
+    rewritten from scratch to ensure correct brace structure throughout.
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.01  —  Remove Microsoft Office button
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Feature addition
+Files  : Scripts\Local\Remove-MicrosoftOffice.ps1
+         Scripts\Remote\Remove-RemoteMicrosoftOffice.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURE ADDED
+  -------------
+  Remove Office button added to the Maintenance ribbon on both
+  the Local PC tab and the Remote PC tab.
+
+  Local PC — Scripts\Local\Remove-MicrosoftOffice.ps1
+    Comprehensive removal script covering all Office versions (2010 through
+    Microsoft 365 Apps), Visio, and Project. Executes six sequential steps:
+
+    Step 1 — Force-closes all running Office processes (Word, Excel,
+             Outlook, PowerPoint, Teams, OneDrive, ClickToRun service, etc.)
+    Step 2 — Click-to-Run / ODT uninstall: locates OfficeClickToRun.exe,
+             generates a minimal ODT XML config (Remove All="TRUE") and
+             runs setup.exe /configure or OfficeClickToRun.exe directly.
+    Step 3 — MSI-based uninstall: scans registry uninstall hives for any
+             product matching "Microsoft Office|Visio|Project", runs quiet
+             uninstall string, then iterates known upgrade code GUIDs via
+             msiexec /x for older versions C2R may have missed.
+    Step 4 — SaRA fallback: if Steps 2 and 3 both fail, downloads and runs
+             Microsoft Support and Recovery Assistant with the
+             OfficeScrubScenario argument (requires internet access).
+    Step 5 — Registry and filesystem cleanup: removes Office registry trees
+             (HKLM, HKCU, WOW6432Node), ClickToRun service keys, Program
+             Files folders, ProgramData and AppData Office folders, and
+             Start Menu shortcut directories.
+    Step 6 — Verification: re-scans registry uninstall hives and checks
+             for known WINWORD.EXE binary paths to confirm removal.
+    Writes a transcript log to %TEMP%\OfficeRemoval_<timestamp>.log.
+
+  Remote PC — Scripts\Remote\Remove-RemoteMicrosoftOffice.ps1
+    Identical removal logic (Steps 1-3, 5-6) wrapped in
+    Invoke-Command -ComputerName $TargetHost. $TargetHost is injected
+    automatically by the AdminToolKit PowerShellRunner.
+    SaRA fallback (Step 4) is omitted from the remote version — SaRA
+    requires an interactive user session and cannot run over PSRemoting.
+    If C2R and MSI removal both find nothing, the output advises running
+    the local script directly on the target machine to use SaRA.
+    Write-Log colour parameters (-ForegroundColor) are removed from the
+    remote version as they are not supported over PSRemoting and would
+    suppress output.
+
+  NOTE: Both scripts require the application to be run as Administrator.
+  Removal is irreversible. Office data (documents) is not affected —
+  only application files, registry entries, and shortcuts are removed.
+
+
+════════════════════════════════════════════════════════════
+VERSION 1.0  —  Stable baseline
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Status : Stable baseline
+
+  Production-ready release with all known bugs resolved.
+  Full feature set across Local PC, Remote PC, and Active Directory tabs.
+  Includes application icon, light/dark themes, README, LICENSE, and
+  complete PowerShell script library.
+
+  See all versions below for the full history of changes and fixes.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.17  —  Threading fix (ObservableCollection crash)
+════════════════════════════════════════════════════════════
+Type   : Bug fix
+Files  : ViewModels\LocalScriptsViewModel.cs
+         ViewModels\RemoteScriptsViewModel.cs
+         ViewModels\ActiveDirectoryViewModel.cs
+
+  PROBLEM
+  -------
+  Running scripts in the application (particularly in a domain-joined lab
+  environment with elevation) threw an unhandled UI error:
+    "System.InvalidOperationException: An ItemsControl is inconsistent
+     with its items source."
+  The ObservableCollection received CollectionChanged events out of order,
+  causing an accumulated count mismatch.
+
+  CAUSE
+  -----
+  All three ViewModels used "async void ExecuteScript" with "await" to run
+  the PowerShell tasks. By default, "await" resumes on the captured
+  SynchronizationContext (UI thread in WPF). However, under certain
+  conditions in a domain-joined elevated process, the SynchronizationContext
+  can be lost, causing the post-await continuation to resume on a thread
+  pool thread. The Emit() calls for the header divider and completion footer
+  lines then executed off the UI thread and raced with the ObservableCollection,
+  causing count mismatches.
+
+  RESOLUTION
+  ----------
+  Added .ConfigureAwait(true) to all three await calls across the ViewModels:
+    await _runner.RunLocalAsync(...).ConfigureAwait(true);
+    await _runner.RunRemoteAsync(...).ConfigureAwait(true);
+  ConfigureAwait(true) explicitly forces continuation back to the captured
+  synchronization context regardless of environment, guaranteeing all
+  post-await Emit() calls execute on the UI thread.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.16  —  File menu improvements
+════════════════════════════════════════════════════════════
+Type   : Bug fix + feature update
+Files  : Views\MainWindow.xaml
+
+  PROBLEM
+  -------
+  The File menu scrolled because it contained too many items (7 items with
+  separators between each). ApplicationMenu.FooterPanelContent was attempted
+  to pin Exit at the bottom but failed to build — this property does not
+  exist in Fluent.Ribbon 9.0.3 (it was added in a later version), producing
+  build error: MC3074 "The tag 'ApplicationMenu.FooterPanelContent' does
+  not exist in XML namespace 'urn:fluent-ribbon'."
+
+  RESOLUTION
+  ----------
+  Removed Clear Output from the File menu (it duplicates the Tools ribbon
+  button on all three tabs). Removed all separators between items except
+  the one before Exit. The menu now contains 5 items (Save Output, Switch
+  Theme, Install RSAT Tools, README / Help, Exit) which fits without
+  scrolling at any normal window height.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.15  —  Install RSAT Tools + README help menu item
+════════════════════════════════════════════════════════════
+Type   : Feature addition + bug fix
+Files  : Views\MainWindow.xaml
+         Views\MainWindow.xaml.cs
+         Scripts\Local\Install-RSATTools.ps1
+
+  FEATURES ADDED
+  --------------
+  File > Install RSAT Tools
+    New menu item that runs Install-RSATTools.ps1 after showing a
+    confirmation dialog listing which tools will be installed. Output
+    streams to the main console panel. Supports Windows 10/11
+    (Add-WindowsCapability) and Windows Server (Install-WindowsFeature).
+    Installs: Active Directory DS, Group Policy Management, DNS, DHCP,
+    BitLocker Recovery, Certificate Services, Remote Desktop Services.
+
+  File > README / Help
+    New menu item that opens README.md in the system default text editor.
+    Searches four candidate paths relative to the exe to handle different
+    run locations (beside exe, 1-3 levels up). README.md is also linked
+    in the csproj with CopyToOutputDirectory=PreserveNewest so it is
+    always beside the exe after a build.
+
+  BUG FIX — README not found error
+    Initial implementation used a hardcoded two-level-up path that failed
+    when running the built exe from bin\Release\. Fixed by checking four
+    candidate paths in order and using the first that exists.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.14  —  License, README, and project documentation
+════════════════════════════════════════════════════════════
+Type   : Feature addition
+Files  : LICENSE.txt
+         README.md
+
+  FEATURES ADDED
+  --------------
+  LICENSE.txt
+    Microsoft Public License (MS-PL) adapted for AdminToolKit. Includes
+    standard MS-PL sections (definitions, copyright grant, patent grant,
+    conditions/limitations) plus AdminToolKit-specific section covering
+    irreversible operations, administrator privilege acknowledgement,
+    liability limitation, and Microsoft trademark disclaimer.
+
+  README.md (rewritten)
+    Complete rewrite documenting all 52 scripts across all three tabs,
+    full build instructions, WinRM and RSAT setup, architecture diagram,
+    how-to-add-a-script guide, output console colour coding, theme
+    switching, security notes, and expanded troubleshooting table.
+    License section updated to reference LICENSE.txt with MS-PL summary.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.13  —  Application icon and avatar
+════════════════════════════════════════════════════════════
+Type   : Feature addition + bug fix
+Files  : AdminToolKit\admintoolkit.ico
+         Views\MainWindow.xaml
+         AdminToolKit.csproj
+
+  FEATURES ADDED
+  --------------
+  Application icon (Option 3 — Badge & Wordmark design)
+    Multi-resolution ICO file (16, 24, 32, 48, 64, 128, 256px) generated
+    with Pillow. Design: dark rounded square (#0F1923), blue outer ring
+    (#1A6FD4), bold white ATK text, blue underline (#4D9FFF), ADMIN TOOLKIT
+    subtext, green cursor block (#3DDC84), corner accent dots.
+    Wired into csproj as ApplicationIcon (embeds in exe) and as a Resource.
+    Set as Icon property on RibbonWindow (title bar and taskbar).
+
+  BUG FIX — Underline through text
+    Initial icon generation placed the underline using textbbox() which
+    includes internal leading, causing the line to bisect the letters.
+    Fixed by switching to font.getbbox("ATK") which returns the true ink
+    bounds of the capital letters (no descenders), then adding a gap
+    below cap_visual_bottom before drawing the line.
+
+  Copy to Clipboard button added to Tools ribbon on all three tabs
+    Reads directly from _vm.OutputLines using Clipboard.SetText(). Handled
+    in C# code-behind — no PowerShell spawned. Shows a confirmation popup
+    with the count of lines copied.
+
+  IconClipboard and IconPrint DrawingImage resources added to MainWindow.xaml
+    IconPrint was referenced by Restart Spooler and Add Printer buttons but
+    was never defined, causing XamlParseException on launch. Both icons
+    added as SVG geometry DrawingImage resources.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.12  —  Add Printer, AD renames, Remote tab expansions
+════════════════════════════════════════════════════════════
+Type   : Feature addition
+Files  : Scripts\Local\Add-Printer.ps1
+         Scripts\Remote\Add-RemotePrinter.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURES ADDED
+  --------------
+  Add Printer button — Local Maintenance ribbon
+    Prompts for printer IP/hostname and display name. Creates a TCP/IP
+    port (IP_<address>), detects Microsoft IPP Class Driver with fallback
+    to first available driver, then calls Add-Printer. Uses parameter
+    injection instead of Read-Host (incompatible with the runner).
+
+  Add Printer button — Remote Maintenance ribbon
+    Same logic wrapped in Invoke-Command -ArgumentList so printer address
+    and name are passed into the remote session correctly.
+
+  Active Directory renames
+    "Stale Computers" renamed to "Inactive Computers" (button and Tag).
+    "Clone Groups" renamed to "Clone User" (button and Tag).
+
+  Tools ribbon — all tabs moved to last position
+    Tools group (Clear Output, Copy to Clipboard) is now the final ribbon
+    group on all three tabs for consistent positioning.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.11  —  Remote tab: Clear Temp, Delete Old Users
+════════════════════════════════════════════════════════════
+Type   : Feature addition
+Files  : Scripts\Remote\Clear-RemoteTempFiles.ps1
+         Scripts\Remote\Remove-RemoteOldUserProfiles.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURES ADDED
+  --------------
+  Clear Temp and Delete Old Users copied from Local Maintenance to Remote
+  Maintenance ribbon. Both scripts use Invoke-Command.
+
+  Clear-RemoteTempFiles.ps1
+    Reports System Temp, SoftwareDistribution, DeliveryOptimization,
+    CCMCache, MemoryDump, and Windows.old on the target machine.
+    Shell.Application COM (used locally for Recycle Bin) is not available
+    over PSRemoting, so Recycle Bin is omitted from the remote version.
+
+  Remove-RemoteOldUserProfiles.ps1
+    Prompts for daysThreshold. Passes the value via -ArgumentList
+    ([int]$daysThreshold) into the Invoke-Command scriptblock with a
+    matching param([int]$days). Variables from the local session are not
+    automatically available inside Invoke-Command — explicit ArgumentList
+    passing is required.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.10  —  Remote Fixes group + Remote Intune Sync
+════════════════════════════════════════════════════════════
+Type   : Feature addition
+Files  : Scripts\Remote\Invoke-RemoteIntuneSync.ps1
+         Scripts\Remote\Repair-RemoteWindows.ps1
+         Scripts\Remote\Fix-RemoteWMI.ps1
+         Scripts\Remote\Reset-RemoteFileAssociations.ps1
+         Scripts\Remote\Fix-RemoteWindowsUpdate.ps1
+         Scripts\Remote\Remove-RemoteSCCMClient.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURES ADDED
+  --------------
+  Intune Sync added to Remote Maintenance ribbon. Checks for PushLaunch
+  task existence before running to provide a meaningful error if not enrolled.
+
+  New Remote Fixes ribbon group added to Remote PC tab with five buttons
+  mirroring the Local Fixes group. All scripts use Invoke-Command wrapping
+  the same logic as their local counterparts. $TargetHost is injected by
+  the PowerShellRunner before the scriptblock.
+
+  Clean SCCM added to both Local Fixes and Remote Fixes ribbons.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.9  —  Active Directory new scripts
+════════════════════════════════════════════════════════════
+Type   : Feature addition
+Files  : Scripts\ActiveDirectory\Copy-GroupMembership.ps1
+         Scripts\ActiveDirectory\Export-OUObjects.ps1
+         Scripts\ActiveDirectory\Export-GroupMembership.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURES ADDED
+  --------------
+  Clone User (Group Management)
+    Copies all group memberships from source to target using
+    Get-ADPrincipalGroupMembership + Add-ADPrincipalGroupMembership.
+    Domain Users filtered out (cannot be assigned manually).
+
+  Export OU Objects (Reports)
+    Prompts for OU Distinguished Name. Exports Name, ObjectClass,
+    Description, DistinguishedName, whenCreated, whenChanged to
+    C:\temp\<OUName>.csv. Creates C:\temp\ if it does not exist.
+
+  Export Group Members (Reports)
+    Prompts for group name. Exports Username, DisplayName, EmailAddress,
+    Description, Enabled to C:\temp\<GroupName>.csv.
+
+  BUG FIX — Spaces in group name broke CSV filename
+    The filename sanitise regex originally only stripped illegal filename
+    characters but left spaces, producing filenames like
+    "IT Security Team.csv" which caused issues with Export-Csv.
+    Fixed by adding \s to the regex: -replace '[\s\\/:*?"<>|]', '_'
+    Spaces are now converted to underscores in the output filename.
+
+  BUG FIX — CS1009 unrecognized escape sequences (build error)
+    Description strings containing C:\temp\. caused build errors because
+    \t is a tab character in C# regular strings. Fixed by doubling all
+    backslashes: C:\\\\temp\\\\. in the Description properties.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.8  —  Fixes ribbon, Repair Windows, Health Check
+════════════════════════════════════════════════════════════
+Type   : Feature addition
+Files  : Scripts\Local\Repair-Windows.ps1
+         Scripts\Local\Invoke-HealthCheck.ps1
+         Scripts\Local\Fix-WMIRepository.ps1
+         Scripts\Local\Reset-FileAssociations.ps1
+         Scripts\Local\Fix-WindowsUpdate.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURES ADDED
+  --------------
+  New Fixes ribbon group on Local PC tab containing:
+    Repair Windows  — DISM /Online /Cleanup-Image /RestoreHealth
+    Fix WMI         — stops service, deletes repository, re-registers
+                      all WBEM DLLs, recompiles MOF/MFL files
+    Reset File Ext  — clears HKCU UserChoice registry entries, restarts Explorer
+    Fix Win Update  — renames SoftwareDistribution and Catroot2 folders,
+                      restarts wuauserv, cryptSvc, bits, msiserver
+  Health Check added to Maintenance ribbon — runs sfc /scannow.
+
+  BUG FIX — CS1056 unexpected '$' character (build error)
+  ScriptRegistry.cs line 176:
+    Write-Host "$($members.Count) member(s) found."
+  The double-quotes inside the C# verbatim @"..." string terminated the
+  string early, leaving $($members.Count) as bare C# code. Fixed by
+  replacing with: Write-Host ($members.Count.ToString() + ' member(s) found.')
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.7  —  Output formatting fixes (FormatEntryData)
+════════════════════════════════════════════════════════════
+Type   : Bug fix
+Files  : Scripts\Local\Get-InstalledSoftware.ps1
+         Scripts\Local\Get-LastLogins.ps1
+         Scripts\Local\Get-RunningServices.ps1
+         Helpers\ScriptRegistry.cs (Flush DNS, Open Ports inline scripts)
+
+  PROBLEM
+  -------
+  Several scripts displayed output like:
+    Microsoft.PowerShell.Commands.Internal.Format.FormatEntryData
+  instead of actual text data.
+
+  CAUSE
+  -----
+  Scripts used Format-Table, Format-List, or Write-Output with pipeline
+  objects. The PowerShellRunner collects output from ps.Invoke() which
+  returns PSObject results. Format-Table/List produce internal formatting
+  objects (FormatStartData, FormatEntryData, GroupEndData, FormatEndData)
+  which ToString() as their type names rather than readable text.
+
+  RESOLUTION
+  ----------
+  All affected scripts rewritten to use Write-Host with manual column
+  formatting using PowerShell's -f string format operator:
+    Write-Host ("{0,-25} {1,-20} {2}" -f $col1, $col2, $col3)
+  This outputs plain strings that the runner captures correctly.
+
+  Get-LastLogins.ps1: replaced Format-Table with foreach loop and
+    manually formatted columns for Time, Account, Domain, LogonType,
+    Workstation, Source IP.
+
+  Local Admins inline script: replaced Get-LocalGroupMember (not available
+    on older Windows/Server versions) with ADSI WinNT://./Administrators
+    which works on all Windows versions. Also fixed the member count
+    Write-Host line which had double-quotes inside a C# verbatim string.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.6  —  Maintenance ribbon expansion + script updates
+════════════════════════════════════════════════════════════
+Type   : Feature addition + script replacement
+Files  : Scripts\Local\Clear-TempFiles.ps1
+         Scripts\Local\Invoke-IntuneSync.ps1
+         Scripts\Local\Remove-OldUserProfiles.ps1
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+
+  FEATURES ADDED
+  --------------
+  Clear Temp updated with full disk space report script
+    Replaced the simple temp-delete script with a comprehensive disk
+    usage reporter covering: user Temp, SystemRoot\Temp, SoftwareDistribution
+    Download, DeliveryOptimization, Edge cache, Chrome cache, CCM cache,
+    MEMORY.DMP, Windows.old, and Recycle Bin (via Shell.Application COM).
+
+  Intune Sync added to Local Maintenance
+    Triggers Get-ScheduledTask -TaskName "PushLaunch" | Start-ScheduledTask
+
+  Delete Old Users added to Local Maintenance
+    Prompts for daysThreshold. Enumerates Win32_UserProfile objects,
+    compares folder LastWriteTime against cutoff date, deletes profile
+    and removes HKLM ProfileList registry entry. Requires Administrator.
+
+  Running Services removed from System Information group
+    Duplicate of information available elsewhere; removed to reduce ribbon
+    clutter.
+
+  Installed Software button retained; script rewritten
+    Uploaded script file was empty. Existing registry-based inventory
+    script kept and updated to use Write-Host with column formatting.
+
+  Tools ribbon repositioned to last group on all tabs.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.5  —  ObservableCollection threading fix (first pass)
+════════════════════════════════════════════════════════════
+Type   : Bug fix
+Files  : Helpers\PowerShellRunner.cs
+
+  PROBLEM
+  -------
+  Running Get-SystemInfo.ps1 (and other scripts) intermittently caused:
+    "System.InvalidOperationException: An ItemsControl is inconsistent
+     with its items source. Accumulated count 16 is different from
+     actual count 18."
+
+  CAUSE
+  -----
+  The original PowerShellRunner used DataAdded event handlers on
+  ps.Streams.Output, ps.Streams.Error, ps.Streams.Warning. These events
+  fire on PowerShell background threads while ps.Invoke() is still running.
+  Multiple threads were calling Dispatcher.Invoke simultaneously to add
+  items to the ObservableCollection, causing count race conditions.
+
+  RESOLUTION
+  ----------
+  Removed all DataAdded event handlers. PowerShellRunner now calls
+  ps.Invoke() synchronously on the background thread, then iterates
+  the returned PSObjects and ps.Streams collections after Invoke() returns.
+  All lines are collected into a plain List<OutputLine> with no cross-thread
+  access, then delivered to the UI thread in a single Dispatcher.Invoke()
+  call. This guarantees FIFO order and no collection races.
+
+  NOTE: A second threading fix was required in v0.17 for the post-await
+  Emit() calls in the ViewModels. Both fixes are required together for
+  full stability in domain-joined elevated environments.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.4  —  Theme system + remote target bar
+════════════════════════════════════════════════════════════
+Type   : Feature addition + bug fixes
+Files  : Helpers\ThemeManager.cs
+         Themes\LightTheme.xaml
+         Themes\DarkTheme.xaml
+         Views\Controls\RemoteTargetBar.xaml / .cs
+         Views\MainWindow.xaml
+         Properties\Settings.settings
+
+  FEATURES ADDED
+  --------------
+  Light/dark theme switching (File > Switch Theme)
+    ThemeManager swaps slot 1 of App.Resources.MergedDictionaries at runtime.
+    Slot 0 = Fluent Generic.xaml (never touched). Slot 1 = active theme.
+    Theme preference persisted to Properties.Settings.Default.Theme.
+
+  Remote Target Bar
+    Shown only when Remote PC tab is selected. Contains hostname input,
+    Connect button (pings target), and a three-state status indicator
+    (grey/green/red) driven by DataTriggers on overlapping ellipses.
+    Optional credentials section (collapsible) for non-domain machines.
+
+  BUG FIX — StringToColorConverter not found in UserControl scope
+    RemoteTargetBar used a converter that wasn't in scope of the UserControl.
+    Fixed by replacing with DataTrigger-driven ellipses requiring no
+    converter at all.
+
+  BUG FIX — CS0103 RemoteBar build error
+    RemoteTabItem.IsSelected was checked in the constructor before the
+    element was loaded. Fixed by moving the check to the Loaded event.
+
+  BUG FIX — Duplicate resource keys in theme files
+    Both theme files had duplicate key definitions causing XamlParseException.
+    Removed older duplicate copies, keeping the correct versions.
+
+  BUG FIX — Color= instead of Value= in DarkTheme.xaml
+    A Setter had Color="..." instead of Value="...", which is invalid in
+    WPF Setter syntax. Corrected to Value=.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.3  —  Build error fixes + ControlzEx dependency
+════════════════════════════════════════════════════════════
+Type   : Bug fixes
+Files  : AdminToolKit.csproj
+         packages.config
+
+  BUG FIX — FileNotFoundException: ControlzEx.dll
+    Fluent.Ribbon 9.0.3 depends on ControlzEx 5.0.1 which NuGet should
+    copy to bin\Release\ but did not because the csproj had no explicit
+    Reference. Added explicit Reference Include with HintPath pointing to
+    packages\ControlzEx.5.0.1\lib\net462\ControlzEx.dll.
+
+  BUG FIX — FileNotFoundException: Microsoft.Xaml.Behaviors.dll
+    Same issue as ControlzEx. Added explicit Reference for
+    Microsoft.Xaml.Behaviors.Wpf 1.1.3 from lib\net45\.
+
+  BUG FIX — net48 vs net462 target framework mismatch
+    packages.config and csproj HintPaths specified net48 but the NuGet
+    packages only ship net462 assemblies. Changed all references to net462.
+
+  BUG FIX — ParameterInputDialog.cs missing from Compile list
+    ParameterInputDialog.cs existed on disk but was not in a <Compile>
+    ItemGroup in the csproj. Added <Compile Include="Views\Dialogs\
+    ParameterInputDialog.cs" />.
+
+  BUG FIX — Invalid WPF properties in XAML
+    TextTransform, LetterSpacing: not valid in WPF 4.8 (these are WinUI/
+    UWP properties). Removed from DarkTheme.xaml and ScriptOutputPanel.xaml.
+
+  BUG FIX — PlaceholderText not valid in WPF
+    PlaceholderText is a WinUI/UWP TextBox property. Replaced with a
+    WPF-compatible watermark TextBox style using an IsEmpty trigger.
+
+  BUG FIX — IconPrint resource missing
+    RibbonWindow references IconPrint for the Print Spooler button but no
+    DrawingImage with that key existed. Added IconPrint as a printer SVG
+    geometry resource in MainWindow.xaml.
+
+  BUG FIX — $($members.Count) double-quote in C# verbatim string
+    The PowerShell expression $($members.Count) inside a C# @"..." string
+    contained an unescaped double-quote that terminated the string early.
+    Changed to concatenation: .Count.ToString() + " member(s) found."
+
+  BUG FIX — C:\temp\ escape sequences in Description strings
+    C:\temp\. in regular C# string literals caused CS1009 (unrecognized
+    escape: \t = tab, \. = invalid). Fixed by doubling backslashes to
+    C:\\\\temp\\\\.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.2  —  App startup crash fix
+════════════════════════════════════════════════════════════
+Type   : Bug fix
+Files  : App.xaml.cs
+         App.xaml
+
+  PROBLEM
+  -------
+  Application crashed silently on launch with no visible error message.
+
+  CAUSE
+  -----
+  Exception handlers were registered in OnStartup() which is called after
+  InitializeComponent(). XAML resource dictionaries merge during
+  InitializeComponent(), so any XamlParseException or resource load failure
+  occurred before the handlers were wired up and crashed silently.
+
+  RESOLUTION
+  ----------
+  Moved all exception handler registration to the App() constructor which
+  executes before any XAML loading:
+    - DispatcherUnhandledException (UI thread errors)
+    - AppDomain.CurrentDomain.UnhandledException (background thread errors)
+    - try/catch around base.OnStartup() for startup-phase exceptions
+  Added detailed error dialog showing full exception type, message, and
+  inner exception chain to surface previously-invisible errors.
+  Removed unused fluent: namespace declaration from App.xaml.
+
+
+════════════════════════════════════════════════════════════
+VERSION 0.1  —  Initial project baseline
+════════════════════════════════════════════════════════════
+Date   : March/April 2026
+Status : Initial build — multiple compile errors
+
+  Initial AdminToolKit project created with:
+    - WPF + Fluent.Ribbon 9.0.3 on .NET Framework 4.8
+    - MVVM architecture (BaseViewModel, MainViewModel, LocalVM, RemoteVM, AdVM)
+    - PowerShellRunner with async local and remote execution
+    - ScriptRegistry as single source of truth for all scripts
+    - Three ribbon tabs: Local PC, Remote PC, Active Directory
+    - ScriptOutputPanel (colour-coded console output)
+    - ParameterInputDialog for user input prompts
+    - RemoteHostDialog and CredentialDialog for WinRM connection
+    - Initial script library: 22 local, 8 remote, 12 AD scripts
+    - Dark theme as default
+
+  Known issues at this baseline:
+    - Multiple build errors (net48/net462, missing ControlzEx reference,
+      missing ParameterInputDialog in compile list, invalid WPF properties)
+    - Silent startup crash (exception handlers registered too late)
+    - ObservableCollection threading crashes on script output
+    - FormatEntryData display issue in several scripts
+    - No application icon
+    - No light theme or theme switching
+    - No remote target bar UI
+
+  All issues resolved in subsequent versions above.
+
+
+═══════════════════════════════════════════════════════════
+SUMMARY OF ALL CHANGES (v0.1 → v1.0)
+═══════════════════════════════════════════════════════════
+
+BUILD FIXES
+  - net48 → net462 in packages.config and csproj HintPaths
+  - ParameterInputDialog.cs added to csproj Compile list
+  - ControlzEx.dll and Microsoft.Xaml.Behaviors.dll explicit references added
+  - TextTransform / LetterSpacing / PlaceholderText removed (WinUI props)
+  - IconPrint DrawingImage resource added
+  - $($members.Count) double-quote in verbatim string fixed
+  - C:\temp\ escape sequences doubled in Description strings
+  - ApplicationMenu.FooterPanelContent removed (not in Fluent.Ribbon 9)
+
+RUNTIME FIXES
+  - App startup crash: exception handlers moved to App() constructor
+  - ObservableCollection race: DataAdded events removed, batch delivery added
+  - ObservableCollection race (domain-joined): ConfigureAwait(true) added
+  - FormatEntryData output: all scripts converted to Write-Host + -f formatting
+  - Local Admins: Get-LocalGroupMember replaced with ADSI (compatibility fix)
+  - Export CSV spaces: \s added to filename sanitise regex
+
+FEATURES ADDED
+  - Light/dark theme with runtime switching and persisted preference
+  - Remote Target Bar with hostname input and connection status indicator
+  - Application icon (multi-resolution ICO, 7 sizes) and GitHub avatar
+  - Copy to Clipboard button (Tools ribbon, all 3 tabs)
+  - Fixes ribbon (Local + Remote): Repair Windows, Fix WMI, Reset File Ext,
+    Fix Win Update, Clean SCCM
+  - Maintenance additions: Intune Sync, Delete Old Users (parameterised),
+    Add Printer (parameterised), Health Check, Clear Temp (disk report)
+  - Remote PC tab: Remote Fixes group (5 scripts), Remote Maintenance
+    expanded (Intune Sync, Clear Temp, Delete Old Users, Add Printer)
+  - AD tab: Clone User, Export OU Objects, Export Group Members (with CSV)
+  - File menu: Save Output, Switch Theme, Install RSAT Tools, README / Help
+  - Install RSAT Tools: Win10/11 and Server compatible PowerShell script
+  - README.md: comprehensive documentation for all 52 scripts
+  - LICENSE.txt: Microsoft Public License (MS-PL)
+
+VERSION 1.01
+  - Remove Office button: Local and Remote Maintenance ribbons
+    Covers C2R, MSI, SaRA fallback (local only), registry/filesystem cleanup

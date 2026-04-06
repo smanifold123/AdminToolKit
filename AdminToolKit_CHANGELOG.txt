@@ -4,7 +4,122 @@ Versions listed newest first (v1.0 = current release, working backwards).
 Each entry documents what changed, why it happened, and how it was resolved.
 
 
-════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+VERSION 1.11  --  Security hardening + feature set expansion
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Security + new features
+Files  : Scripts\Remote\Start-RemoteControl.ps1
+         Scripts\Remote\Start-RemoteDesktop.ps1  (new)
+         ViewModels\RemoteScriptsViewModel.cs
+         Helpers\PowerShellRunner.cs
+         Helpers\ScriptRegistry.cs
+         Views\MainWindow.xaml
+         Views\Controls\ScriptOutputPanel.xaml / .cs
+         Views\Controls\RemoteTargetBar.xaml / .cs
+         Properties\Settings.Designer.cs
+         Properties\Settings.settings
+         Build-Installer.bat
+         AdminToolKit_Installer.nsi  (v1.11)
+         SECURITY.md, README.md, CONTRIBUTING.md
+
+  SECURITY FIX 1 -- CmRcViewer hard-coded path
+  -----------------------------------------------
+  Start-RemoteControl.ps1 previously hard-coded the CmRcViewer
+  path to the default SCCM Admin Console install location.
+  If installed to a non-default path, the script failed silently.
+  Now checks registry key:
+    HKLM\SOFTWARE\WOW6432Node\Microsoft\ConfigMgr10\AdminUI
+  using AdminUILog and AdminUIInstallPath values, derives the
+  i386\ subfolder path, and falls back to the hard-coded default
+  only if the registry lookup finds nothing.
+
+  SECURITY FIX 2 -- Plain string password replaced with SecureString
+  --------------------------------------------------------------------
+  RemoteScriptsViewModel previously stored the remote password as
+  a plain string property, keeping it in managed heap memory for
+  the lifetime of the session.
+  Now uses System.Security.SecureString:
+    - PasswordBox syncs to SecureString via SetPassword() on change
+    - Plain text extracted only transiently via Marshal.PtrToStringBSTR
+      immediately before Invoke-Command execution
+    - Marshal.ZeroFreeBSTR zeroes the unmanaged BSTR immediately
+    - SecureString cleared and disposed after each script run
+  SECURITY.md updated to reflect this change.
+
+  NEW FEATURE -- Remote Desktop button
+  ----------------------------------------
+  New 'Remote Desktop' button added to Support group on Remote PC tab
+  (beside the existing Remote Control button).
+  Start-RemoteDesktop.ps1 launches mstsc.exe /v:$TargetHost.
+  If alternate credentials are configured, uses cmdkey to pre-seed
+  them into Windows Credential Manager before launching mstsc,
+  so RDP connects without prompting the user. A background job
+  removes the saved credentials from Credential Manager after
+  15 seconds automatically.
+
+  NEW FEATURE -- Script timeout and Cancel button
+  ------------------------------------------------
+  PowerShellRunner now accepts a CancellationToken on both
+  RunLocalAsync and RunRemoteAsync. Uses BeginInvoke/EndInvoke
+  polling with 200ms intervals to check for cancellation.
+  RemoteScriptsViewModel creates a CancellationTokenSource
+  with the configured timeout (default: 30 seconds from
+  Settings.ScriptTimeout) before each run. A 'Cancel' button
+  appears in the Remote Target Bar while a script is running
+  and calls CancellationTokenSource.Cancel() when clicked.
+
+  NEW FEATURE -- Multiple remote targets
+  ----------------------------------------
+  An expandable 'Multiple targets' section in the Remote Target
+  Bar accepts a comma-separated list of hostnames. When populated,
+  the next script run executes sequentially against all listed
+  hosts. Progress shown in status bar (e.g. '2/5'). Falls back
+  to single hostname field when the multi-target box is empty.
+
+  NEW FEATURE -- Saved target profiles
+  ----------------------------------------
+  A profile ComboBox in the Remote Target Bar shows saved targets.
+  Clicking Save Profile (floppy disk icon) saves the current
+  hostname, domain, and username as a named profile (up to 10).
+  Profiles serialised to Properties.Settings.SavedTargetProfiles
+  and persist across sessions. Selecting a profile auto-fills
+  the hostname, domain, and username fields.
+
+  NEW FEATURE -- Settings persistence
+  ----------------------------------------
+  Remote hostname, domain, username, and UseCredentials checkbox
+  now persisted in Properties.Settings (user-scoped) and restored
+  on next launch. ScriptTimeout also persisted. New settings:
+    RemoteHostname, RemoteDomain, RemoteUsername,
+    RemoteUseCredentials, ScriptTimeout, SavedTargetProfiles
+
+  NEW FEATURE -- Output search/filter
+  ----------------------------------------
+  A filter text box with magnifier icon added above the console
+  output panel. Typing filters visible lines in real time (case-
+  insensitive substring match). A clear button resets the filter.
+  Auto-scroll to bottom is suspended while filter is active.
+
+  NEW FEATURE -- HTML export
+  ----------------------------------------
+  'Export HTML' button added to the console panel header bar.
+  Saves all output lines as a colour-coded HTML file (Catppuccin
+  Mocha dark theme). Colours match the console: cyan headers,
+  green success, red errors, amber warnings, grey dividers.
+  Uses System.Web.HttpUtility.HtmlEncode for safe output.
+
+  NEW FEATURE -- Code signing support in Build-Installer.bat
+  ----------------------------------------
+  Build-Installer.bat now includes an optional code signing step.
+  Set SIGN_CERT to a certificate thumbprint and SIGN_TSA to a
+  timestamp authority URL to automatically sign the installer
+  with signtool.exe after NSIS compiles it. Eliminates the
+  SmartScreen 'Unknown publisher' warning in enterprise deployments.
+  Step is skipped when SIGN_CERT is blank (default).
+
+
+════
 VERSION 1.10  --  SCCM Remote Control integration
 ════════════════════════════════════════════════════════════
 Date   : April 2026

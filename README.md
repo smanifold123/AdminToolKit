@@ -3,7 +3,7 @@
 **A WPF + Fluent.Ribbon PowerShell administration suite for Windows sysadmins.**
 
 Built with .NET Framework 4.8, Windows PowerShell 5.1, and Fluent.Ribbon 9.x.
-Industrial dark UI with light/dark theme switching. Three ribbon tabs. 55 built-in scripts. Easy to extend.
+Industrial dark UI with light/dark theme switching. Three ribbon tabs. 56 built-in scripts. Easy to extend.
 
 ---
 
@@ -17,6 +17,12 @@ Industrial dark UI with light/dark theme switching. Three ribbon tabs. 55 built-
 - **Parameterised scripts** — buttons that need input prompt the user before running
 - **Remote credentials** — optional alternate credential support for non-domain remote machines
 - **SCCM Remote Control** — one-click Remote Control viewer (CmRcViewer.exe) for the target PC via SCCM/ConfigMgr
+- **Remote Desktop (RDP)** — launch an RDP session to the target PC with optional credential pass-through via Windows Credential Manager
+- **Multiple remote targets** — run any remote script against a comma-separated list of PCs in one click
+- **Saved target profiles** — save and reload frequently-used hostnames and credentials across sessions
+- **Script timeout & cancel** — configurable timeout (default 30s) with a Cancel button to stop hung scripts
+- **Output search/filter** — real-time filter box above the console to search long output
+- **HTML export** — save colour-coded output as an HTML file for sharing and reporting
 
 ---
 
@@ -270,6 +276,12 @@ Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
 ### 🖧 Remote PC Tab
 
 > All remote scripts use `Invoke-Command -ComputerName $TargetHost`. Enter the target hostname in the Remote Target Bar and click **Connect** before running scripts.
+>
+> **Multiple targets:** expand the "Multiple targets" section in the Remote Target Bar and enter a comma-separated list of hostnames to run a script against all of them sequentially.
+>
+> **Saved profiles:** click 💾 to save the current hostname and credentials as a profile, then select it from the dropdown on future sessions.
+>
+> **Cancel:** a Cancel button appears while a script is running. Scripts also time out automatically after the configured timeout (default: 30 seconds).
 
 #### Remote System
 
@@ -313,7 +325,8 @@ Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
 
 | Button | Description |
 |--------|-------------|
-| Remote Control | Launch the SCCM Remote Control viewer (CmRcViewer.exe) for the target PC. Connects without any interactive prompts — the target hostname is passed directly. Requires CmRcViewer.exe installed at `C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\i386\`. |
+| Remote Control | Launch the SCCM Remote Control viewer (CmRcViewer.exe) for the target PC. Connects without any interactive prompts. Path resolved from registry with hard-coded fallback. Requires CmRcViewer.exe at `C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\i386\`. |
+| Remote Desktop | Open an RDP session (`mstsc.exe`) to the target PC. If alternate credentials are configured, they are temporarily saved to Windows Credential Manager via `cmdkey` and auto-removed after 15 seconds. |
 
 #### Tools
 

@@ -55,9 +55,13 @@ When alternate credentials are provided for remote execution:
 - Credentials are **never written to disk**, logged, or stored in the registry
 - The password is converted to a `PSCredential` object with a `SecureString`
   immediately before the `Invoke-Command` call
-- The `RemoteScriptsViewModel` holds the password as a plain `string` property
-  while the Remote Target Bar is open — this is a known limitation. Clear the
-  credential fields or close the session when done.
+- The `RemoteScriptsViewModel` holds the password as a `SecureString` — it is
+  never stored as a plain `string` property. The `PasswordBox` in the UI syncs
+  to `SecureString` via `SetPassword()` on every keystroke. The plain text is
+  only extracted to a temporary variable immediately before `Invoke-Command`
+  executes, and is disposed from the `SecureString` via
+  `Marshal.ZeroFreeBSTR()` after extraction. The `SecureString` itself is
+  cleared and disposed immediately after each script run.
 - Credentials are not persisted between application restarts
 
 **Recommendation:** Use Windows integrated authentication (Kerberos/Negotiate)
@@ -144,11 +148,29 @@ Be mindful when pasting into ticketing systems, emails, or chat tools.
 
 | Area | Limitation |
 |------|------------|
-| Credential storage | Password held as plain `string` in `RemoteScriptsViewModel` while the session is open |
+| Credential storage | Password held as `SecureString` in `RemoteScriptsViewModel`; plain text only extracted transiently for PS injection and immediately zeroed |
 | WinRM TrustedHosts | Setup guides use `*` — restrict in production |
 | Script signing | `.ps1` files are not Authenticode-signed |
 | No MFA support | Alternate credentials use username/password only |
 | No audit log | AdminToolKit itself does not log which scripts were run or by whom |
+
+---
+
+## Code Signing
+
+The official `AdminToolKit-Setup.exe` installer is unsigned by default.
+Enterprise environments may encounter a Windows SmartScreen warning
+("Unknown publisher") on first run.
+
+To sign the installer with your organisation's code-signing certificate:
+
+1. Set `SIGN_CERT=YOUR_CERT_THUMBPRINT` in `Build-Installer.bat`
+2. Set `SIGN_TSA` to your timestamp authority URL
+3. Run `Build-Installer.bat` — `signtool.exe` will be called automatically
+
+Obtaining a trusted code-signing certificate requires purchasing one from a
+Certificate Authority (e.g. DigiCert, Sectigo, GlobalSign). Self-signed
+certificates do not eliminate the SmartScreen warning.
 
 ---
 

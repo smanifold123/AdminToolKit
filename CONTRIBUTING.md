@@ -157,6 +157,7 @@ new ScriptDefinition
 | `IconClipboard` | Clipboard |
 | `IconPrint` | Printer |
 | `IconRemoteControl` | Monitor with cursor |
+| `IconRemoteDesktop` | Monitor with play arrow (RDP) |
 
 To add a new icon, add a `DrawingImage` with a unique `x:Key` to
 `Window.Resources` in `MainWindow.xaml` using SVG path geometry.
@@ -176,6 +177,8 @@ add a button:
 
 > **Important:** The `Tag` value must **exactly match** `ScriptDefinition.Name`
 > in `ScriptRegistry.cs`. The click handler uses `Tag` to look up the script.
+
+> **Password handling:** Never store passwords as plain `string`. The `RemoteScriptsViewModel` uses `SecureString` with a `SetPassword()` method. If your feature needs the password, call `GetPlainPassword()` (private) and dispose the result immediately after use.
 
 **Click handlers by tab:**
 

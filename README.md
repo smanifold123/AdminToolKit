@@ -3,7 +3,7 @@
 **A WPF + Fluent.Ribbon PowerShell administration suite for Windows sysadmins.**
 
 Built with .NET Framework 4.8, Windows PowerShell 5.1, and Fluent.Ribbon 9.x.
-Industrial dark UI with light/dark theme switching. Three ribbon tabs. 56 built-in scripts. Easy to extend.
+Industrial dark UI with light/dark theme switching. Three ribbon tabs. 57 built-in scripts. Easy to extend.
 
 ---
 

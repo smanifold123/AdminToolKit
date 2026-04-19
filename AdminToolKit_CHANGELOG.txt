@@ -4,7 +4,291 @@ Versions listed newest first (v1.0 = current release, working backwards).
 Each entry documents what changed, why it happened, and how it was resolved.
 
 
-════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+VERSION 1.13  --  Custom title bar, Remote Software, Clear Temp deletion
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : New features + UI enhancement
+Files  : Views\MainWindow.xaml
+         Helpers\ScriptRegistry.cs
+         Scripts\Remote\Get-RemoteInstalledSoftware.ps1  (new)
+         Scripts\Local\Clear-TempFiles.ps1
+         Scripts\Remote\Clear-RemoteTempFiles.ps1
+         AdminToolKit_Installer.nsi  (v1.13)
+         README.md, SECURITY.md
+
+  NEW FEATURE -- Custom title bar (VMware-style banner)
+  -------------------------------------------------------
+  The Fluent.Ribbon title bar area now displays a custom header
+  showing: app icon + 'AdminToolKit 1.13' in semibold + muted
+  subtitle text. Uses fluent:Ribbon.TitleBar with a DataTemplate
+  so the icon and version are always visible in the title bar
+  alongside the native Fluent.Ribbon minimize/maximize/close
+  window control buttons.
+  Window Title updated to 'AdminToolKit 1.13 — PowerShell
+  Administration Suite' for the OS taskbar and Alt-Tab.
+  File : Views\MainWindow.xaml
+
+  NEW FEATURE -- Remote Installed Software button
+  -------------------------------------------------
+  New 'Software' button added to the Remote System ribbon group
+  on the Remote PC tab. Runs Get-RemoteInstalledSoftware.ps1
+  which queries both 64-bit and 32-bit Uninstall registry keys
+  (HKLM\SOFTWARE\...\Uninstall and WOW6432Node equivalent),
+  sorts by name, and outputs a formatted table showing:
+  Name, Version, Publisher, Install Date.
+  Long names and publishers are truncated with ellipsis to
+  keep column alignment. Total app count shown at the end.
+  Files: Helpers\ScriptRegistry.cs,
+         Views\MainWindow.xaml (button + IconInstalledSoftware),
+         Scripts\Remote\Get-RemoteInstalledSoftware.ps1 (new)
+
+  FEATURE UPDATE -- Clear Temp: now actually deletes files
+  ----------------------------------------------------------
+  Both Clear-TempFiles.ps1 (local) and Clear-RemoteTempFiles.ps1
+  (remote) previously reported disk usage only with a note to
+  run Disk Cleanup manually. They now perform two-phase cleanup:
+
+  Phase 1 — SCAN:
+    Reports the size of each temp/cache location before deletion
+    so the operator can see what will be freed.
+
+  Phase 2 — DELETE:
+    Calls Remove-SafeFolder() / Remove-SafeFile() helpers that:
+      - Use Remove-Item -LiteralPath -Recurse -Force on folder
+        contents (preserves the folder itself so apps don't break)
+      - Silently skip locked files (-ErrorAction SilentlyContinue)
+      - Report bytes freed per location
+    Also empties the Recycle Bin (local only) via Clear-RecycleBin
+    and removes MEMORY.DMP if present.
+
+  Phase 3 — SUMMARY:
+    Shows total disk space freed and drive free space before/after.
+
+  Locations cleaned (both local and remote):
+    System Temp, Software Distribution Download,
+    Delivery Optimisation, SCCM Cache (ccmcache),
+    Edge Cache, Chrome Cache, Memory Dump (MEMORY.DMP)
+  Local only: User Temp ($env:TEMP), Recycle Bin
+
+  Files: Scripts\Local\Clear-TempFiles.ps1
+         Scripts\Remote\Clear-RemoteTempFiles.ps1
+
+  INSTALLER / VERSION -- Bumped to 1.13
+  ----------------------------------------
+  APP_VERSION updated to 1.13 in AdminToolKit_Installer.nsi.
+  Welcome page updated to reference 1.13.
+  SECURITY.md supported versions table updated.
+  README.md script count updated to 57.
+
+
+════
+VERSION 1.12  --  CISO security remediation
+════════════════════════════════════════════════════════════
+Date   : April 2026
+Type   : Security — CISO review findings resolved
+Files  : Helpers\PowerShellRunner.cs
+         Helpers\AuditLogger.cs  (new)
+         ViewModels\RemoteScriptsViewModel.cs
+         Scripts\Remote\Start-RemoteDesktop.ps1
+         Views\MainWindow.xaml
+         Views\MainWindow.xaml.cs
+         AdminToolKit.csproj
+         SECURITY.md
+
+  Background
+  -----------
+  A CISO-level security review identified six findings prior to
+  internal deployment approval. All six were remediated in this
+  release. The application was reviewed against common enterprise
+  security controls including ISO 27001, GDPR audit trail
+  requirements, and OWASP secure coding practices.
+
+  SECURITY FIX 1 — Plain-text password embedded in script string
+  ---------------------------------------------------------------
+  Severity : HIGH
+  Finding  : PowerShellRunner.ExecuteRemote() constructed
+             credential injection by building a PowerShell string
+             literal containing the plain-text password:
+               $__pass = ConvertTo-SecureString 'PASSWORD' -AsPlainText
+             This meant the password existed as a plain string in
+             managed heap memory and appeared verbatim in the
+             script text passed to the PS engine. Any heap dump,
+             crash report, or logging of the script text would
+             expose the credential.
+  Fix      : Credentials are now passed via the PowerShell API
+             using RunspaceFactory and Runspace.SessionStateProxy
+             .SetVariable("__cred", psCred). A PSCredential object
+             is constructed from the SecureString directly — the
+             password never appears as a string literal in script
+             text. The SecureString is passed by reference, not
+             extracted to plain text at any point during injection.
+  File     : Helpers\PowerShellRunner.cs — ExecuteRemote() method
+             now opens a Runspace, calls SetVariable("__cred"),
+             and attaches the PowerShell instance to that runspace
+             before execution.
+
+  SECURITY FIX 2 — No audit trail of administrative actions
+  -----------------------------------------------------------
+  Severity : HIGH
+  Finding  : AdminToolKit executed PowerShell scripts with
+             Administrator privileges against local and remote
+             machines with no logging. There was no way to answer
+             "who ran what, against which machine, and when" in
+             a GDPR data subject request, an ISO 27001 audit, or
+             an internal security investigation.
+  Fix      : New AuditLogger.cs helper writes a tamper-evident
+             append-only log to:
+               %ProgramData%\AdminToolKit\audit.log
+             Every script execution is logged with:
+               - ISO-8601 UTC timestamp
+               - Windows identity (domain\username)
+               - Source machine name
+               - Script category (Local / Remote / ActiveDirectory)
+               - Script name
+               - Target hostname (LOCAL for local scripts)
+               - Result (SUCCESS / FAILURE)
+               - Duration in seconds
+               - Error summary (first error message if failed)
+             Pipe characters in field values are replaced with /
+             to prevent log injection. The log file uses append-
+             only writes with a SemaphoreSlim lock to prevent
+             race conditions on concurrent executions. Logging
+             failures are silently swallowed so they can never
+             crash the application.
+             A "View Audit Log" menu item added to the File menu
+             opens the log in the system default text viewer.
+  File     : Helpers\AuditLogger.cs (new)
+             Helpers\PowerShellRunner.cs — Log() called from
+             both ExecuteLocal() and ExecuteRemote() after
+             completion.
+             Views\MainWindow.xaml — menu item added.
+             Views\MainWindow.xaml.cs — handler added.
+             AdminToolKit.csproj — AuditLogger.cs added to
+             Compile items.
+
+  SECURITY FIX 3 — Hostname injection attack surface
+  ----------------------------------------------------
+  Severity : MEDIUM
+  Finding  : The target hostname entered in the Remote Target Bar
+             was injected directly into the PowerShell script as:
+               $TargetHost = 'HOSTNAME'
+             Only single-quote escaping was applied (' → '').
+             A hostname containing PowerShell metacharacters
+             (backtick, semicolon, dollar sign, pipe) could
+             break out of the string context and execute arbitrary
+             PowerShell on the admin machine.
+  Fix      : ValidateHostname() added to PowerShellRunner. The
+             method applies a strict allowlist — only letters,
+             digits, hyphens, dots, and underscores are permitted
+             (valid DNS name and IPv4 address characters). Any
+             hostname failing validation causes the script to be
+             blocked before execution, and an error line is written
+             to the output panel. Maximum length capped at 253
+             characters (RFC 1035 DNS limit).
+  File     : Helpers\PowerShellRunner.cs — ValidateHostname()
+             static method, called before scriptText is built in
+             ExecuteRemote().
+
+  SECURITY FIX 4 — Script parameter variable name sanitisation
+  -------------------------------------------------------------
+  Severity : MEDIUM
+  Finding  : Script parameter names (keys from ScriptDefinition
+             .Parameters dictionary) were injected into the script
+             preamble as variable names without sanitisation:
+               $PARAMETERNAME = 'value'
+             A malicious or corrupted script definition with a
+             parameter name containing PowerShell-significant
+             characters could produce unexpected variable
+             declarations.
+  Fix      : EscapeVarName() strips all characters that are not
+             alphanumeric or underscore from parameter names
+             before they are used as variable identifiers in the
+             injected preamble. Combined with the existing
+             EscapePs() single-quote escaping on values, all
+             parameter injection is now fully sanitised.
+  File     : Helpers\PowerShellRunner.cs — InjectParameters()
+             updated to call EscapeVarName() on each key.
+
+  SECURITY FIX 5 — Execution policy bypass documentation
+  -------------------------------------------------------
+  Severity : LOW
+  Finding  : Set-ExecutionPolicy -ExecutionPolicy Bypass was
+             called via ps.AddScript() meaning it appeared as
+             script text. CISO review noted this should be
+             clearly documented as process-scoped only.
+  Fix      : SetBypassPolicy() and SetBypassPolicyOnRunspace()
+             refactored with explicit XML documentation comments
+             confirming the scope is Scope Process only and does
+             not modify system-wide or user-level policy. The
+             runspace-based approach in ExecuteRemote() calls
+             SetBypassPolicyOnRunspace() on the new Runspace
+             before adding the user script, ensuring the bypass
+             is isolated to that execution context.
+  File     : Helpers\PowerShellRunner.cs — methods annotated.
+
+  SECURITY FIX 6 — WinRM TrustedHosts = * guidance
+  --------------------------------------------------
+  Severity : LOW
+  Finding  : The WinRM setup documentation recommended setting
+             TrustedHosts to * (wildcard), meaning the admin
+             machine would accept responses from any hostname
+             without certificate validation. In environments with
+             untrusted network segments this creates a
+             man-in-the-middle risk.
+  Fix      : SECURITY.md updated with hardening recommendation
+             to restrict TrustedHosts to specific IP ranges or
+             subnet CIDRs, and to use WinRM over HTTPS (port
+             5986) with a valid certificate in sensitive
+             environments. The setup guide note retained for
+             lab/test use but flagged as not recommended for
+             production.
+  File     : SECURITY.md — Hardening Recommendations section.
+
+  SECURITY.md — Full rewrite (v1.12)
+  ------------------------------------
+  SECURITY.md was comprehensively rewritten to accurately reflect
+  the security model introduced in v1.12. Key changes:
+
+    - Supported Versions table updated to 1.11/1.12.
+    - Remote Credential Handling rewritten: documents the
+      RunspaceFactory/SetVariable() approach (v1.12), replacing
+      the superseded Marshal.PtrToStringBSTR approach.
+    - New Input Validation section: ValidateHostname() allowlist
+      rules and EscapeVarName() parameter sanitisation.
+    - New Audit Logging section: full log format table, file
+      location, locking mechanism, and File menu access.
+    - New Remote Desktop (RDP) section: cmdkey credential window
+      and 15-second auto-cleanup security model.
+    - New CISO Review Findings (v1.12) section: summary table
+      of all 6 findings with before/after write-up for each.
+    - Known Limitations updated: removed resolved "No audit log"
+      item; added audit log not cryptographically signed and
+      15-second RDP credential window.
+    - Hardening Recommendations expanded from 7 to 9 items:
+      added SIEM ingestion of audit log and PAM credential
+      rotation policy.
+  File     : SECURITY.md
+
+  BUILD FIX — PSDataCollection type mismatch (CS1503)
+  -----------------------------------------------------
+  CollectOutput() declared its second parameter as
+  Collection<PSObject> but ps.EndInvoke() returns
+  PSDataCollection<PSObject>. These are not implicitly
+  convertible, causing CS1503 errors at lines 82 and 181.
+  Fix      : Parameter type changed to
+             PSDataCollection<PSObject> to match EndInvoke().
+  File     : Helpers\PowerShellRunner.cs — CollectOutput().
+
+  INSTALLER — Version bumped to 1.12
+  ------------------------------------
+  APP_VERSION updated from 1.11 to 1.12 in the NSIS script.
+  Installer welcome page, branding, registry version key, and
+  Add/Remove Programs DisplayVersion all reflect 1.12.
+  File     : AdminToolKit_Installer.nsi
+
+
+════
 VERSION 1.11  --  Security hardening + feature set expansion
 ════════════════════════════════════════════════════════════
 Date   : April 2026

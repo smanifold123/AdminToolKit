@@ -463,8 +463,6 @@ AdminToolKit is licensed under the **Microsoft Public License (MS-PL)**.
 See [LICENSE.txt](LICENSE.txt) for the full license text.
 
 Key points:
-- Free to use, modify, and distribute for any purpose
-- Derivative works may be distributed under a compatible license
 - No warranty is provided — you use the software at your own risk
 - Attribution required if redistributing: *"Based on AdminToolKit"*
 - The AdminToolKit name and logo may not be used to endorse modified versions

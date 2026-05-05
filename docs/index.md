@@ -31,13 +31,36 @@ A modern, modular **Windows SysAdmin toolkit** built with **PowerShell**, **WPF*
 
 ## 🖼️ Screenshot Gallery
 
-> Place images in `/docs/screenshots/` and they will appear here.
+### App – Landing Page
+<img src="screenshots/App - Landing page.jpg" width="800"/>
 
-### Dashboard
-<img src="screenshots/dashboard.png" width="800"/>
+### AD – Landing Page
+<img src="screenshots/AD - landing page.jpg" width="800"/>
 
-### User Provisioning
-<img src="screenshots/user-provisioning.png" width="800"/>
+### AD – Computer Info
+<img src="screenshots/AD - Computer Info.jpg" width="800"/>
+
+### AD – Export Group Member (Prompt)
+<img src="screenshots/AD - Export Group Member - Prompt.jpg" width="800"/>
+
+### AD – Export Group Member (Output)
+<img src="screenshots/AD - Export Group Member - output.jpg" width="800"/>
+
+### Remote – Delete Old Users (Prompt)
+<img src="screenshots/remote - delete old users - prompt.jpg" width="800"/>
+
+### Remote – Delete Old Users (Output)
+<img src="screenshots/remote - delete old users - output.jpg" width="800"/>
+
+### Remote – Disk Usage
+<img src="screenshots/remote - disk usage.jpg" width="800"/>
+
+### Local – System Info
+<img src="screenshots/local - system info.jpg" width="800"/>
+
+### Local – Test Connection
+<img src="screenshots/local - test connection.jpg" width="800"/>
+
 
 ---
 

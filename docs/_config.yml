@@ -1,0 +1,8 @@
+theme: jekyll-theme-cayman
+title: AdminToolKit
+description: A modern Windows SysAdmin toolkit built with PowerShell and WPF.
+show_downloads: false
+
+# Optional: custom CSS
+include:
+  - css/custom.css
